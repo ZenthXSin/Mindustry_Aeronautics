@@ -1,81 +1,193 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.Kapt
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 version '1.0'
 
-buildscript{
-    repositories{
+buildscript {
+    repositories {
         mavenCentral()
+        maven { url 'https://jitpack.io' }
+        // EntityAnno 插件仓库
+        maven { url 'https://raw.githubusercontent.com/GglLfr/EntityAnnoMaven/main' }
     }
 
-    ext{
-        //the build number that this mod is made for
-        mindustryVersion = 'v158.1'
+    ext {
+        mindustryVersion = 'v158'
         kotlinVersion = "2.2.0"
+        entVersion = "v158.0.0"  // EntityAnno 版本
         sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
         isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
         modArtifactName = project.name
     }
 
-    dependencies{
+    dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        // EntityAnno Gradle 插件
+        classpath "com.github.GglLfr.EntityAnno:com.github.GglLfr.EntityAnno.gradle.plugin:$entVersion"
     }
 }
 
 apply plugin: "kotlin"
+apply plugin: "kotlin-kapt"
+apply plugin: "com.github.GglLfr.EntityAnno"
 
 sourceSets.main.kotlin.srcDirs = ["src"]
+sourceSets.main.java.srcDirs = ["src"]
 
-repositories{
+repositories {
     mavenCentral()
 
-    //Downloads the dependencies JAR file from Mindustry releases
-    ivy{
+    // EntityAnno 专用仓库
+    maven { url 'https://raw.githubusercontent.com/GglLfr/EntityAnnoMaven/main' }
+
+    // Mindustry/Arc 稳定版
+    maven { url 'https://maven.xpdustry.com/mindustry' }
+
+    maven { url 'https://jitpack.io' }
+
+    ivy {
         url 'https://github.com/'
-        patternLayout{artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar'}
-        metadataSources{ artifact() }
+        patternLayout { artifact '/[organisation]/[module]/releases/download/[revision]/[artifact].jar' }
+        metadataSources { artifact() }
     }
 
-    //"Latest" option to depend on BE builds.
-    ivy{
+    ivy {
         url 'https://github.com/'
-        patternLayout{artifact '/[organisation]/[module]/releases/download/master/[revision].jar'}
-        metadataSources{ artifact() }
+        patternLayout { artifact '/[organisation]/[module]/releases/download/master/[revision].jar' }
+        metadataSources { artifact() }
     }
 }
 
-dependencies{
-    def useLatest = false //set to "true" to always depend on the newest version of mindustry
+dependencies {
+    def useLatest = false
 
     compileOnly useLatest ? "Anuken:MindustryBuilds:latest" : "Anuken:Mindustry:$mindustryVersion"
+
+    // EntityAnno 注解处理器
+    compileOnly "com.github.GglLfr.EntityAnno:entity:$entVersion"
+    kapt "com.github.GglLfr.EntityAnno:entity:$entVersion"
+
+    // EntityAnno Java 语法降级器
+    annotationProcessor "com.github.GglLfr.EntityAnno:downgrader:$entVersion"
+
+    implementation 'org.dyn4j:dyn4j:5.0.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0'
+}
+
+// EntityAnno 插件配置
+entityAnno {
+    modName = 'aero'
+    mindustryVersion = project.ext.mindustryVersion
+    isJitpack = false
+    revisionDir = layout.projectDirectory.dir('revisions').asFile
+    fetchPackage = "aero.fetch"
+    genSrcPackage = "aero.entity.comp"
+    genPackage = "aero.gen"
+}
+
+// EntityAnno v158 fetches through GitHub's unauthenticated Contents API, which
+// frequently hits the shared rate limit. Fetch the same sources through Git and
+// keep them outside build/ so a clean build can reuse them.
+def entityAnnoConfig = extensions.getByName("entityAnno")
+tasks.named("fetchComps").configure { fetchTask ->
+    fetchTask.setActions([])
+    fetchTask.doLast {
+        def repository = entityAnnoConfig.isJitpack.get() ? "MindustryJitpack" : "Mindustry"
+        def revision = entityAnnoConfig.mindustryVersion.get()
+        def cacheKey = "${repository}-${revision}".replaceAll(/[^A-Za-z0-9._-]/, "_")
+        def cacheDir = layout.projectDirectory.dir(".gradle/entity-anno/${cacheKey}").asFile
+        def componentSourceDir = new File(cacheDir, "core/src/mindustry/entities/comp")
+
+        def runGit = { List<String> arguments ->
+            def command = (["git"] + arguments).collect { it.toString() }
+            def process = new ProcessBuilder(command)
+                    .directory(project.projectDir)
+                    .inheritIO()
+                    .start()
+            def exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw new GradleException("Command failed (${exitCode}): ${command.join(' ')}")
+            }
+        }
+
+        if (!componentSourceDir.isDirectory()) {
+            delete(cacheDir)
+            cacheDir.parentFile.mkdirs()
+            runGit([
+                    "clone", "--depth", "1", "--single-branch", "--filter=blob:none", "--sparse",
+                    "--branch", revision,
+                    "https://github.com/Anuken/${repository}.git",
+                    cacheDir.absolutePath
+            ])
+            runGit([
+                    "-C", cacheDir.absolutePath,
+                    "sparse-checkout", "set", "core/src/mindustry/entities/comp"
+            ])
+        }
+
+        def fetchRoot = layout.buildDirectory.dir("fetched").get().asFile
+        def fetchPackage = entityAnnoConfig.fetchPackage.get()
+        def destinationDir = new File(fetchRoot, fetchPackage.replace('.', '/'))
+
+        delete(fetchRoot)
+        copy {
+            from(componentSourceDir)
+            into(destinationDir)
+            include("*.java")
+        }
+
+        def components = fileTree(destinationDir).matching { include("*.java") }.files
+        if (components.isEmpty()) {
+            throw new GradleException("No Mindustry component sources found in ${componentSourceDir}")
+        }
+
+        components.each { component ->
+            def processed = ent.EntityAnnoPlugin.procComp(component.getText("UTF-8"), fetchPackage)
+            component.setText(processed, "UTF-8")
+        }
+        logger.lifecycle("Wrote {} components from Git cache.", components.size())
+    }
 }
 
 tasks.withType(KotlinCompile).configureEach {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_1_8)
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+tasks.withType(Kapt).configureEach {
+    dependsOn(tasks.named("fetchComps"))
+    source.from(layout.buildDirectory.dir("fetched"))
+}
+
+// EntityAnno disables Kotlin tasks for its Java-only template. This project has
+// a Kotlin mod entry point and content definitions, so restore those tasks after
+// the plugin has finished configuring them.
+afterEvaluate {
+    tasks.withType(KotlinCompile).configureEach {
+        setOnlyIf { true }
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    sourceCompatibility = "1.8"
-    targetCompatibility = "1.8"
-    options.release = 8
+    sourceCompatibility = "17"
+    targetCompatibility = "17"
+    options.release = 17
 }
 
-task jarAndroid{
+task jarAndroid {
     dependsOn "jar"
 
-    doLast{
-        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
+    doLast {
+        if (!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.");
 
-        def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find{ f -> new File(f, "android.jar").exists()}
+        def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
 
-        if(!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
+        if (!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
 
-        //collect dependencies needed for desugaring
-        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect{ "--classpath $it.path" }.join(" ")
+        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect { "--classpath $it.path" }.join(" ")
 
-        //dex and desugar files - this requires d8 in your PATH
         def d8 = isWindows ? "d8.bat" : "d8"
 
         "$d8  $dependencies --min-api 14 --output ${modArtifactName}Android.jar ${modArtifactName}Desktop.jar"
@@ -83,33 +195,33 @@ task jarAndroid{
     }
 }
 
-jar{
+jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     archiveFileName = "${modArtifactName}Desktop.jar"
 
-    from{
-        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 
-    from(rootDir){
+    from(rootDir) {
         include "mod.hjson"
     }
 
-    from("assets/"){
+    from("assets/") {
         include "**"
     }
 }
 
-task deploy(type: Jar){
+task deploy(type: Jar) {
     dependsOn jarAndroid
     dependsOn jar
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     archiveFileName = "${modArtifactName}.jar"
 
-    from{[zipTree("$buildDir/libs/${modArtifactName}Desktop.jar"), zipTree("$buildDir/libs/${modArtifactName}Android.jar")]}
+    from { [zipTree("$buildDir/libs/${modArtifactName}Desktop.jar"), zipTree("$buildDir/libs/${modArtifactName}Android.jar")] }
 
-    doLast{
-        delete{
+    doLast {
+        delete {
             delete "$buildDir/libs/${modArtifactName}Desktop.jar"
             delete "$buildDir/libs/${modArtifactName}Android.jar"
         }
