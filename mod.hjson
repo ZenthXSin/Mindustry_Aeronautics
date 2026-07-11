@@ -11,7 +11,8 @@ author: "ZenthXSin"
 main: "aero.Aero"
 
 #the mod description as seen in the mod dialog
-description: "像素工厂：航天学"
+description: "像素工厂：航天学
+目前只能使用原版游玩"
 
 #the mod version
 version: 0.0.1

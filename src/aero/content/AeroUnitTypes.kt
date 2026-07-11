@@ -1,7 +1,7 @@
 package aero.content
 
 import aero.gen.EntityRegistry
-import aero.gen.UnitPhysicEntity
+import aero.gen.UnitPhysicEntityBridge
 import mindustry.type.UnitType
 
 object AeroUnitTypes {
@@ -11,7 +11,7 @@ object AeroUnitTypes {
     fun load() {
         smallPlane = EntityRegistry.content(
             "small-plane",
-            UnitPhysicEntity::class.java
+            UnitPhysicEntityBridge::class.java
         ) { name ->
             UnitType(name).apply {
                 flying = true
