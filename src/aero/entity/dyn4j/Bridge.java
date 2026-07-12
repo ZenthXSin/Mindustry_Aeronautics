@@ -8,6 +8,7 @@ import mindustry.entities.units.StatusEntry;
 import mindustry.gen.Posc;
 import mindustry.gen.Rotc;
 import mindustry.gen.Unitc;
+import mindustry.gen.Velc;
 import org.dyn4j.dynamics.Body;
 
 import static ent.anno.Annotations.*;
@@ -50,9 +51,11 @@ abstract class UnitPhysicEntityComp implements PhysicEntityc, Unitc, MindustryXU
     }
 
     @Override
+    @Remove(Velc.class)
     @MethodPriority(100f)
     public void update() {
         syncFromBody();
+        aero.entity.dyn4j.UnitPhysicEntitySupport.syncToVel(body(), this);
     }
 
     @Override

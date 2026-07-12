@@ -7,6 +7,11 @@ import org.dyn4j.dynamics.Body
 import org.dyn4j.world.World
 
 class AeroWorld {
+    private companion object {
+        const val maxFrameTime = 0.25
+        const val maxStepsPerFrame = 8
+    }
+
     val world: World<Body> by lazy {
         World<Body>().apply {
             // Mindustry is a top-down plane; dyn4j defaults to Earth gravity on the Y axis.
@@ -20,11 +25,21 @@ class AeroWorld {
 
     // TODO: move the fixed-step update to its planned physics thread.
     fun update() {
-        accumulator += Core.graphics.deltaTime.toDouble()
-        while (accumulator >= step) {
+        // Do not allow a long frame (or a debugger pause) to create an ever-growing
+        // physics backlog. Such a backlog causes the classic spiral of death where
+        // every following frame spends more time catching up and movement stutters.
+        val frameTime = Core.graphics.deltaTime.toDouble().coerceIn(0.0, maxFrameTime)
+        accumulator = minOf(accumulator + frameTime, step * maxStepsPerFrame)
+
+        var steps = 0
+        while (accumulator >= step && steps < maxStepsPerFrame) {
             world.update(step)
             accumulator -= step
+            steps++
         }
+
+        // Discard any sub-step floating-point residue only when the safety limit was hit.
+        if (steps == maxStepsPerFrame && accumulator >= step) accumulator %= step
     }
 
     fun addBody(body: Body) = world.addBody(body)
