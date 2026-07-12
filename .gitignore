@@ -35,6 +35,9 @@ packr-out/
 config/
 *.gif
 
+# Local source references used while developing the mod.
+/.reference/
+
 version.properties
 
 .attach_*
