@@ -65,6 +65,12 @@ abstract class UnitPhysicEntityComp implements PhysicEntityc, Unitc, MindustryXU
     }
 
     @Override
+    @Replace
+    public void lookAt(float angle) {
+        aero.entity.dyn4j.UnitPhysicEntitySupport.lookAtBody(angle, body(), type().rotateSpeed, speedMultiplier());
+    }
+
+    @Override
     @BypassGroupCheck
     public void remove() {
         disposeBody();
@@ -82,7 +88,7 @@ abstract class UnitPhysicEntityComp implements PhysicEntityc, Unitc, MindustryXU
 
     @Override
     public void healthChanged() {
-        // MindustryX event support is optional; vanilla v158 has no matching event API.
+        // MindustryX 事件支持是可选的；原版 v158 没有匹配的事件 API。
     }
 }
 

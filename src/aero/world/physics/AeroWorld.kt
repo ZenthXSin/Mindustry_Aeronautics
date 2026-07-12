@@ -14,7 +14,7 @@ class AeroWorld {
 
     val world: World<Body> by lazy {
         World<Body>().apply {
-            // Mindustry is a top-down plane; dyn4j defaults to Earth gravity on the Y axis.
+            // Mindustry 是俯视平面；dyn4j 默认在 Y 轴上应用地球重力。
             setGravity(0.0, 0.0)
         }
     }
@@ -23,11 +23,10 @@ class AeroWorld {
 
     val step = 1.0 / 60.0
 
-    // TODO: move the fixed-step update to its planned physics thread.
+    // 待办：将固定步长更新移至其计划中的物理线程。
     fun update() {
-        // Do not allow a long frame (or a debugger pause) to create an ever-growing
-        // physics backlog. Such a backlog causes the classic spiral of death where
-        // every following frame spends more time catching up and movement stutters.
+        // 不允许长帧（或调试器暂停）造成不断增长的物理积压。
+        // 这种积压会导致经典的"死亡螺旋"，即每一帧都花费更多时间来追赶，运动出现卡顿。
         val frameTime = Core.graphics.deltaTime.toDouble().coerceIn(0.0, maxFrameTime)
         accumulator = minOf(accumulator + frameTime, step * maxStepsPerFrame)
 
@@ -38,7 +37,7 @@ class AeroWorld {
             steps++
         }
 
-        // Discard any sub-step floating-point residue only when the safety limit was hit.
+        // 仅在达到安全限制时丢弃任何子步长浮点余数。
         if (steps == maxStepsPerFrame && accumulator >= step) accumulator %= step
     }
 
@@ -48,7 +47,7 @@ class AeroWorld {
 
     fun load() {
         Events.on(EventType.WorldLoadBeginEvent::class.java) {
-            // Clear bodies and future joints when switching maps.
+            // 切换地图时清除所有物体和未来的关节。
             world.removeAllBodiesAndJoints()
             accumulator = 0.0
         }
