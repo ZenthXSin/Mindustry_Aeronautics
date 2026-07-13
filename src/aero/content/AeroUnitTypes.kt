@@ -18,6 +18,7 @@ object AeroUnitTypes {
             UnitType(name).apply {
                 flying = true
                 lowAltitude = true
+                physics = false
 
                 health = 120f
                 hitSize = 8f

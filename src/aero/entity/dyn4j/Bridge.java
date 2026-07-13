@@ -54,8 +54,6 @@ abstract class UnitPhysicEntityComp implements PhysicEntityc, Unitc, MindustryXU
     @Remove(Velc.class)
     @MethodPriority(100f)
     public void update() {
-        syncFromBody();
-        aero.entity.dyn4j.UnitPhysicEntitySupport.syncToVel(body(), this);
     }
 
     @Override
@@ -68,6 +66,18 @@ abstract class UnitPhysicEntityComp implements PhysicEntityc, Unitc, MindustryXU
     @Replace
     public void lookAt(float angle) {
         aero.entity.dyn4j.UnitPhysicEntitySupport.lookAtBody(angle, body(), type().rotateSpeed, speedMultiplier());
+    }
+
+    @Override
+    @Replace
+    public float prefRotation() {
+        return rotation();
+    }
+
+    @Override
+    @Replace
+    public void rotateMove(Vec2 vec) {
+        moveAt(arc.util.Tmp.v2.trns(rotation(), vec.len()));
     }
 
     @Override

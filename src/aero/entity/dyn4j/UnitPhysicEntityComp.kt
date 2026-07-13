@@ -73,7 +73,7 @@ object UnitPhysicEntitySupport {
     }
 
     @JvmStatic
-    fun applyPhysicsControls(bodies: List<Body>) {
+    fun applyPhysicsControls() {
         // 同一渲染帧可能补算多个固定子步；每个子步都要重新根据当前状态计算力。
         movementCommands.forEach { (body, command) ->
             applyMovementForce(body, command)
@@ -82,16 +82,28 @@ object UnitPhysicEntitySupport {
         steeringCommands.forEach { (body, command) ->
             applySteeringTorque(body, command)
         }
+    }
 
+    @JvmStatic
+    fun enforceWorldBounds(bodies: List<Body>) {
         // 边界约束必须直接作用于权威的 Body。只修改 Unit.x/y 会在下一次
         // syncFromBody 时被 Body 覆盖，造成边界附近反复跳动。
-        bodies.forEach(::applyWorldBounds)
+        bodies.forEach(::enforceWorldBounds)
     }
 
     @JvmStatic
     fun clearControlCommands() {
         movementCommands.clear()
         steeringCommands.clear()
+    }
+
+    @JvmStatic
+    fun syncBodies(bodies: List<Body>) {
+        bodies.forEach { body ->
+            val unit = body.userData as? Unitc ?: return@forEach
+            PhysicEntitySupport.syncFromBody(unit, unit, body)
+            syncToVel(body, unit)
+        }
     }
 
     private fun applyMovementForce(body: Body, command: MovementCommand) {
@@ -173,7 +185,7 @@ object UnitPhysicEntitySupport {
         body.applyTorque(inertia * desiredAngularAcceleration)
     }
 
-    private fun applyWorldBounds(body: Body) {
+    private fun enforceWorldBounds(body: Body) {
         val unit = body.userData as? Unitc ?: return
         if (!unit.type().bounded || (Vars.net.client() && !unit.isLocal)) return
 
