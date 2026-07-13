@@ -12,6 +12,9 @@ import org.dyn4j.geometry.Transform
 * 所以实际工作Bridge.java委派到这里
  */
 object PhysicEntitySupport {
+    // 当前仍在主线程同步；ThreadLocal 也为后续物理线程接入保留了隔离。
+    private val renderTransform = ThreadLocal.withInitial { Transform() }
+
     @JvmStatic
     fun initBody(position: Posc, rotation: Rotc, previousBody: Body?, newBody: Body): Body {
         disposeBody(previousBody)
@@ -22,6 +25,8 @@ object PhysicEntitySupport {
         }
 
         newBody.transform = transform
+        // 新 Body 没有历史状态；否则第一帧会从 dyn4j 默认原点插值过来。
+        newBody.previousTransform.set(transform)
         newBody.userData = position
         aeroWorld.addBody(newBody)
         return newBody
@@ -31,9 +36,20 @@ object PhysicEntitySupport {
     fun syncFromBody(position: Posc, rotation: Rotc, body: Body?) {
         if (body == null) return
 
-        val center = body.worldCenter
-        position.set(center.x.toFloat(), center.y.toFloat())
-        rotation.rotation((-Math.toDegrees(body.transform.rotationAngle)).toFloat())
+        val interpolated = renderTransform.get()
+        body.previousTransform.lerp(
+            body.transform,
+            aeroWorld.interpolationAlpha,
+            interpolated,
+        )
+
+        // 对局部质心做变换，兼容后续不以原点为质心的三角形等碰撞形状。
+        val localCenter = body.localCenter
+        position.set(
+            interpolated.getTransformedX(localCenter).toFloat(),
+            interpolated.getTransformedY(localCenter).toFloat(),
+        )
+        rotation.rotation((-Math.toDegrees(interpolated.rotationAngle)).toFloat())
     }
 
     @JvmStatic
