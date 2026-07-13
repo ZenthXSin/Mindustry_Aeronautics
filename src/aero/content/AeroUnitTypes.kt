@@ -2,7 +2,9 @@ package aero.content
 
 import aero.gen.EntityRegistry
 import aero.gen.UnitPhysicEntityBridge
+import arc.struct.Seq
 import mindustry.type.UnitType
+import mindustry.type.Weapon
 
 object AeroUnitTypes {
     lateinit var smallPlane: UnitType
@@ -28,6 +30,14 @@ object AeroUnitTypes {
                 engineOffset = 5f
                 engineSize = 2f
                 itemCapacity = 0
+
+                weapons.add(Weapon().apply {
+                    mirror = false
+                    bullet.apply {
+                        lifetime = 60f
+                        speed = 3f
+                    }
+                })
             }
         }
     }

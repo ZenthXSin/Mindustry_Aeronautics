@@ -49,7 +49,7 @@ object UnitPhysicEntitySupport {
         //TODO 计划支持更多形状
         val size = unit.hitSize().toDouble()
         return Body().apply {
-            addFixture(BodyFixture(Geometry.createRectangle(size, size)))
+            addFixture(BodyFixture(Geometry.createRectangle(size, size * 8)))
             setMass(MassType.NORMAL)
             linearDamping = unit.drag() * 60.0
             angularDamping = unit.drag() * 60.0
@@ -149,8 +149,8 @@ object UnitPhysicEntitySupport {
         val inertia = body.mass.inertia
         if (inertia <= 0.0) return
 
-        // Mindustry 与 dyn4j 的旋转正方向相反，目标角度先转换到 dyn4j 坐标系。
-        val targetAngle = Math.toRadians(-command.targetAngle.toDouble())
+        // Mindustry 与 dyn4j 使用相同的逆时针正方向，只需把度转换为弧度。
+        val targetAngle = Math.toRadians(command.targetAngle.toDouble())
         val currentAngle = body.transform.rotationAngle
 
         // atan2(sin, cos) 将误差归一化到 [-PI, PI]，得到带方向的最短角差。

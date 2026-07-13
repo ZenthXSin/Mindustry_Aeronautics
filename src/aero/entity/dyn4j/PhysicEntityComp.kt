@@ -21,7 +21,8 @@ object PhysicEntitySupport {
 
         val transform = Transform().apply {
             translate(position.x().toDouble(), position.y().toDouble())
-            rotate(Math.toRadians(-rotation.rotation().toDouble()))
+            // Arc/Mindustry 与 dyn4j 都在 Y 轴向上的世界坐标中逆时针增加角度。
+            rotate(Math.toRadians(rotation.rotation().toDouble()))
         }
 
         newBody.transform = transform
@@ -49,7 +50,7 @@ object PhysicEntitySupport {
             interpolated.getTransformedX(localCenter).toFloat(),
             interpolated.getTransformedY(localCenter).toFloat(),
         )
-        rotation.rotation((-Math.toDegrees(interpolated.rotationAngle)).toFloat())
+        rotation.rotation(Math.toDegrees(interpolated.rotationAngle).toFloat())
     }
 
     @JvmStatic
