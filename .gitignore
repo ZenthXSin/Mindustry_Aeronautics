@@ -157,3 +157,6 @@ gradle-app.setting
 .DS_Store
 Thumbs.db
 android/libs/
+
+# Kotlin IDE caches
+/.kotlin/
